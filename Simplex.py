@@ -221,7 +221,7 @@ def minz(table):
     return val
 
 
-def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_cesta, load_cesta):
+def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_cesta, load_cesta, rendimiento):
     m = gen_matrix(n_var, n_cons)
     inv_cons = np.identity(8)
     inv_arr = np.array(invetarios)
@@ -241,7 +241,7 @@ def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_ce
 
     prod_cons = []
     for x in range(n_var):
-        prod_cons.append(1)
+        prod_cons.append(rendimiento[x])
     prod_cons_top = prod_cons.copy()
     prod_cons_bot = prod_cons.copy()
     prod_cons_top.append("G")
