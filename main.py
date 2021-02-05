@@ -1,7 +1,6 @@
 import pandas as pd
 import Simplex
 from tabulate import tabulate
-import Obj
 
 
 def round_col(df, nom_col):
@@ -46,6 +45,8 @@ num_cesta = int(input("Ingrese el número máximo de cestas: "))
 ##Setear display del df
 pd.set_option("display.max_rows", None, "display.max_columns", None, "display.max_colwidth", 200)
 
+
+
 ##Lectura hoja de cálculo mix
 df_inventario = pd.read_excel("Mix.xlsx", index_col=None, sheet_name='Inventario', usecols="A:F", nrows=8)
 df_comp = pd.read_excel('Mix.xlsx', sheet_name='Composicion', index_col=None, usecols='A:J', nrows=8)
@@ -61,14 +62,17 @@ l_rend = df_inventario['Rendimiento'].tolist()
 l_inv_ll = list(map(lambda x, y: x - (x * y), l_inv, l_lifeline))
 
 
-
 ##Minimización del costo mediante Simplex
-L_uso = list(Simplex.minimize(8, 19, l_precios, l_inv_ll, prod_mes, l_density, num_cesta, vol_cesta, carga, l_rend).values())
-Cost = L_uso.pop(6)
+sol_dir = Simplex.minimize(8, 19, l_precios, l_inv_ll, prod_mes, l_density, num_cesta, vol_cesta, carga, l_rend)
+if 'min' in sol_dir:
+    sol_dir.pop('min')
+
+L_uso = list(sol_dir.values())
 df_inventario['Uso'] = L_uso
 
 ##Formateo de dataframe inventario
 calc_mix(prod_mes)
+L_costo = df_inventario['Costo'].tolist()
 
 ##Cálculo del número de cestas
 Scrap_vol = df_inventario['Volumen Cesta'].sum()
@@ -76,12 +80,12 @@ num_load = Scrap_vol/vol_cesta
 print("Número de cestas: ", num_load)
 
 ##Cálculo del costo por tonelada de chatarra
-Scrap_kpi = Cost / sum(L_uso)
+Scrap_kpi = sum(L_costo) / sum(L_uso)
 print("Costo por tonelada de chatarra: ", Scrap_kpi)
 
 
 print(tabulate(df_inventario, headers='keys', tablefmt='psql'))
-print(tabulate(df_comp, headers='keys', tablefmt='psql'))
+
 
 ##Cálculo de contaminantes
 L_cont,L_cvalue = calc_contaminantes(df_comp,df_inventario)

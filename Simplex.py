@@ -1,5 +1,5 @@
 import numpy as np
-import scipy
+
 
 def gen_matrix(var, cons):
     tab = np.zeros((cons + 1, var + cons + 2))
@@ -55,7 +55,7 @@ def loc_piv_r(table):
         if i ** 2 > 0 and b / i > 0:
             total.append(b / i)
         else:
-            total.append(100000000)
+            total.append(1000000000000)
     index = total.index(min(total))
     return [index, c]
 
@@ -68,7 +68,7 @@ def loc_piv(table):
             if b / (i + 0.0000001) > 0 and (i + 0.0000001) ** 2 > 0:
                 total.append(b / (i + 0.000001))
             else:
-                total.append(100000000)
+                total.append(10000000000000)
         index = total.index(min(total))
         return [index, n]
 
@@ -210,12 +210,16 @@ def minz(table):
         col = table[:, i]
         s = sum(col)
         m = max(col)
+
+
         if float(s) == float(m):
             loc = np.where(col == m)[0][0]
             val[gen_var(table)[i]] = table[loc, -1]
+
         else:
             val[gen_var(table)[i]] = 0
             val['min'] = table[-1, -1] * -1
+
 
 
     return val
@@ -259,8 +263,6 @@ def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_ce
 
     vol_cons.append(n_cesta)
     constrain(m,vol_cons)
-
-
 
     obj(m, precios)
 
