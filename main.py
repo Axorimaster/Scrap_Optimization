@@ -53,7 +53,7 @@ def calc_cestas(inventario, v_max_cesta, l_max_cesta, n_cestas):
     res_base_scrap = 0
     for scrap in l_base_scrap:
         res_base_scrap = res_base_scrap + inventario.loc[scrap, 'Volumen']
-    res_base_scrap = res_base_scrap/3
+    res_base_scrap = res_base_scrap/n_cestas
 
 
     for cesta in range(n_cestas):
@@ -65,7 +65,7 @@ def calc_cestas(inventario, v_max_cesta, l_max_cesta, n_cestas):
 
             if scrap in l_base_scrap:
                 scrap_load_vol = inventario.loc[scrap, 'Volumen']
-                l_vol_cesta.append(scrap_load_vol/3)
+                l_vol_cesta.append(scrap_load_vol/n_cestas)
 
             else:
                 if (l_vol[x]) <= (v_max_cesta-sum(l_vol_cesta)-res_base_scrap-cesta*2):
