@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
 
-class Bucket:
 
-    def __init__(self, num, cap):
-        self.num = num
-        self.cap = cap
-        self.vec_load = np.zeros(8)
 
-B1 = Bucket(1,28)
+L_vol = [25.4, 12.3, 35.4, 0, 0.7, 0, 0, 6]
 
-print(B1.vec_load)
+
+n_iter = 100
+err = 0
+step = 0.1
+n_cestas = 3
+
+
