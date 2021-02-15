@@ -78,6 +78,7 @@ def pivot(row, col, table):
     lc = len(table[0, :])
     t = np.zeros((lr, lc))
     pr = table[row, :]
+
     if table[row, col] ** 2 > 0:
         e = 1 / table[row, col]
         r = pr * e
@@ -198,6 +199,7 @@ def obj(table, eq):
 
 def minz(table):
     table = convert_min(table)
+
     while next_round_r(table):
         table = pivot(loc_piv_r(table)[0], loc_piv_r(table)[1], table)
     while next_round(table):
@@ -225,11 +227,21 @@ def minz(table):
     return val
 
 
-def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_cesta, load_cesta, rendimiento):
+def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_cesta, load_eaf, rendimiento, df_comp):
     m = gen_matrix(n_var, n_cons)
     inv_cons = np.identity(8)
     inv_arr = np.array(invetarios)
     inv_cons = np.append(inv_cons,inv_arr.reshape(8,1),axis=1)
+
+    Cr_max = 0.2
+    Cu_max = 0.4
+    Mo_max = 0.033
+    Ni_max = 0.158
+    l_cu = df_comp['Cu'].tolist()
+    l_cr = df_comp['Cr'].tolist()
+    l_mo = df_comp['Mo'].tolist()
+    l_ni = df_comp['Ni'].tolist()
+
 
     for x in range(n_var):
         l_cons = inv_cons[x].tolist()
@@ -242,6 +254,7 @@ def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_ce
         l_cons_zero.append("G")
         l_cons_zero.append(0)
         constrain(m, l_cons_zero)
+
 
     prod_cons = []
     for x in range(n_var):
@@ -258,11 +271,45 @@ def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_ce
 
     vol_cons =[]
     for x in range(n_var):
-        vol_cons.append((load_cesta/(densidad[x]*vol_cesta*prod)))
+        vol_cons.append((load_eaf/(densidad[x]*vol_cesta*prod)))
     vol_cons.append("L")
 
-    vol_cons.append(n_cesta)
+    vol_cons.append(n_cesta-0.4)
     constrain(m,vol_cons)
+
+
+    l_cons_cu = []
+    for x in range(n_var):
+        val = l_cu[x]/prod
+        l_cons_cu.append(val)
+    l_cons_cu.append("L")
+    l_cons_cu.append(Cu_max)
+
+    constrain(m,l_cons_cu)
+
+    l_cons_cr = []
+    for x in range(n_var):
+        val = l_cr[x] / prod
+        l_cons_cr.append(val)
+    l_cons_cr.append("L")
+    l_cons_cr.append(Cr_max)
+    constrain(m, l_cons_cr)
+
+    l_cons_mo = []
+    for x in range(n_var):
+        val = l_mo[x] / prod
+        l_cons_mo.append(val)
+    l_cons_mo.append("L")
+    l_cons_mo.append(Mo_max)
+    constrain(m, l_cons_mo)
+
+    l_cons_ni = []
+    for x in range(n_var):
+        val = l_ni[x] / prod
+        l_cons_ni.append(val)
+    l_cons_ni.append("L")
+    l_cons_ni.append(Ni_max)
+    constrain(m, l_cons_ni)
 
     obj(m, precios)
 

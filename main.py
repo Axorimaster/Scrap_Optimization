@@ -35,7 +35,7 @@ def calc_contaminantes(comp, inventario):
             sum = sum + l_carga[x]*l_cont[x]
 
         l_cvalue.append(round(sum/35,2))
-        print("Contenido de", col, ":", round(sum/35,2))
+        print("Contenido de", col, ":", round(sum/carga_eaf,3))
 
     return l_col,l_cvalue
 
@@ -56,7 +56,12 @@ def calc_cesta(inventario):
     l_sorted_peso = df_sdensidadmax['Carga'].tolist()
     l_peso = inventario['Carga'].tolist()
 
-    res_base_scrap = 6
+    liv_min = 2
+    liv_max = 4
+    ciz_min = 3
+    ciz_max = 5
+
+    res_base_scrap = liv_min + ciz_min
 
     for cesta in range(num_cesta):
 
@@ -90,28 +95,45 @@ def calc_cesta(inventario):
 
             else:
 
-                if l_sorted_peso[x] <= carga_cesta - sum(l_cesta):
+                if cesta+1 == num_cesta:
 
                     scrap_load = l_peso[usindex]
                     l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
                     l_peso[usindex] = l_peso[usindex] - scrap_load
                     l_cesta.append(scrap_load)
 
+
                 else:
 
-                    if scrap == 'LIVIANA':
+                    if res_base_scrap <= carga_cesta-sum(l_cesta):
 
-                        scrap_load = 3
-                        l_peso[usindex] = l_peso[usindex] - scrap_load
-                        l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
-                        l_cesta.append(scrap_load)
+                        if scrap == 'LIVIANA':
+                            scrap_load = liv_max
+                            l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
+                            l_peso[usindex] = l_peso[usindex] - scrap_load
+                            l_cesta.append(scrap_load)
+
+                        else:
+                            scrap_load = ciz_min
+                            l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
+                            l_peso[usindex] = l_peso[usindex] - scrap_load
+                            l_cesta.append(scrap_load)
 
                     else:
 
-                        scrap_load = 4
-                        l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
-                        l_peso[usindex] = l_peso[usindex] - scrap_load
-                        l_cesta.append(scrap_load)
+                        if scrap == 'LIVIANA':
+
+                            scrap_load = liv_min
+                            l_peso[usindex] = l_peso[usindex] - scrap_load
+                            l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
+                            l_cesta.append(scrap_load)
+
+                        else:
+
+                            scrap_load = ciz_min
+                            l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
+                            l_peso[usindex] = l_peso[usindex] - scrap_load
+                            l_cesta.append(scrap_load)
 
 
 
@@ -180,7 +202,7 @@ l_inv_ll = list(map(lambda x, y: x - (x * y), l_inv, l_lifeline))
 
 
 ##Minimización del costo mediante Simplex
-sol_dir = Simplex.minimize(8, 19, l_precios, l_inv_ll, prod_mes, l_density, num_cesta, vol_cesta, carga_eaf, l_rend)
+sol_dir = Simplex.minimize(8, 23, l_precios, l_inv_ll, prod_mes, l_density, num_cesta, vol_cesta, carga_eaf, l_rend, df_comp)
 if 'min' in sol_dir:
     sol_dir.pop('min')
 
