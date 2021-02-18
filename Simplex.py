@@ -227,20 +227,29 @@ def minz(table):
     return val
 
 
-def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_cesta, load_eaf, rendimiento, df_comp):
+def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_cesta, load_eaf, rendimiento, df_comp, df_res,epsilon):
     m = gen_matrix(n_var, n_cons)
-    inv_cons = np.identity(8)
+    inv_cons = np.identity(n_var)
     inv_arr = np.array(invetarios)
     inv_cons = np.append(inv_cons,inv_arr.reshape(8,1),axis=1)
 
-    Cr_max = 0.2
-    Cu_max = 0.4
-    Mo_max = 0.033
-    Ni_max = 0.158
-    l_cu = df_comp['Cu'].tolist()
-    l_cr = df_comp['Cr'].tolist()
-    l_mo = df_comp['Mo'].tolist()
-    l_ni = df_comp['Ni'].tolist()
+    l_res_cons = df_res['Max'].tolist()
+    l_res_name = df_res['Elementos'].tolist()
+
+    for x in range(len(l_res_cons)):
+
+        max = l_res_cons[x]
+        elemento = l_res_name[x]
+        l_value = df_comp[elemento].tolist()
+
+        l_cons_res = []
+        for i in range(n_var):
+            val = l_value[i] / prod
+            l_cons_res.append(val)
+
+        l_cons_res.append("L")
+        l_cons_res.append(max)
+        constrain(m, l_cons_res)
 
 
     for x in range(n_var):
@@ -274,42 +283,9 @@ def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_ce
         vol_cons.append((load_eaf/(densidad[x]*vol_cesta*prod)))
     vol_cons.append("L")
 
-    vol_cons.append(n_cesta-0.4)
+    vol_cons.append(n_cesta-epsilon)
     constrain(m,vol_cons)
 
-
-    l_cons_cu = []
-    for x in range(n_var):
-        val = l_cu[x]/prod
-        l_cons_cu.append(val)
-    l_cons_cu.append("L")
-    l_cons_cu.append(Cu_max)
-
-    constrain(m,l_cons_cu)
-
-    l_cons_cr = []
-    for x in range(n_var):
-        val = l_cr[x] / prod
-        l_cons_cr.append(val)
-    l_cons_cr.append("L")
-    l_cons_cr.append(Cr_max)
-    constrain(m, l_cons_cr)
-
-    l_cons_mo = []
-    for x in range(n_var):
-        val = l_mo[x] / prod
-        l_cons_mo.append(val)
-    l_cons_mo.append("L")
-    l_cons_mo.append(Mo_max)
-    constrain(m, l_cons_mo)
-
-    l_cons_ni = []
-    for x in range(n_var):
-        val = l_ni[x] / prod
-        l_cons_ni.append(val)
-    l_cons_ni.append("L")
-    l_cons_ni.append(Ni_max)
-    constrain(m, l_cons_ni)
 
     obj(m, precios)
 
