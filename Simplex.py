@@ -227,7 +227,8 @@ def minz(table):
     return val
 
 
-def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_cesta, load_eaf, rendimiento, df_comp, df_res,epsilon):
+def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, load_eaf, df_comp, df_res, epsilon, coladas):
+
     m = gen_matrix(n_var, n_cons)
     inv_cons = np.identity(n_var)
     inv_arr = np.array(invetarios)
@@ -236,25 +237,11 @@ def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_ce
     l_res_cons = df_res['Max'].tolist()
     l_res_name = df_res['Elementos'].tolist()
 
-    for x in range(len(l_res_cons)):
-
-        max = l_res_cons[x]
-        elemento = l_res_name[x]
-        l_value = df_comp[elemento].tolist()
-
-        l_cons_res = []
-        for i in range(n_var):
-            val = l_value[i] / prod
-            l_cons_res.append(val)
-
-        l_cons_res.append("L")
-        l_cons_res.append(max)
-        constrain(m, l_cons_res)
-
-
     for x in range(n_var):
         l_cons = inv_cons[x].tolist()
+        l_cons[x] = l_cons[x]*coladas
         l_cons.insert(n_var,"L")
+
         constrain(m, l_cons)
 
     for x in range(n_var):
@@ -264,27 +251,40 @@ def minimize(n_var, n_cons, precios, invetarios, prod, densidad, n_cesta, vol_ce
         l_cons_zero.append(0)
         constrain(m, l_cons_zero)
 
-
-    prod_cons = []
-    for x in range(n_var):
-        prod_cons.append(rendimiento[x])
+    prod_cons = [1,1,1,1,1,1,1,1]
     prod_cons_top = prod_cons.copy()
     prod_cons_bot = prod_cons.copy()
     prod_cons_top.append("G")
     prod_cons_bot.append("L")
-    prod_cons_top.append(prod-1)
-    prod_cons_bot.append(prod+1)
+    prod_cons_top.append(load_eaf-0.01)
+    prod_cons_bot.append(load_eaf+0.01)
+
     constrain(m, prod_cons_top)
     constrain(m, prod_cons_bot)
 
 
     vol_cons =[]
     for x in range(n_var):
-        vol_cons.append((load_eaf/(densidad[x]*vol_cesta*prod)))
+        vol_cons.append(1/(densidad[x]*vol_cesta))
     vol_cons.append("L")
-
-    vol_cons.append(n_cesta-epsilon)
+    vol_cons.append((n_cesta-epsilon))
     constrain(m,vol_cons)
+
+    for x in range(len(l_res_cons)):
+
+        max = l_res_cons[x]
+        elemento = l_res_name[x]
+        l_value = df_comp[elemento].tolist()
+
+        l_cons_res = []
+        for i in range(n_var):
+            val = l_value[i] / load_eaf
+            l_cons_res.append(val)
+
+        l_cons_res.append("L")
+        l_cons_res.append(max)
+        constrain(m, l_cons_res)
+
 
 
     obj(m, precios)

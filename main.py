@@ -2,6 +2,7 @@ import pandas as pd
 import Simplex
 from tabulate import tabulate
 import openpyxl as opy
+from openpyxl.styles import Font
 
 
 def round_col(df, nom_col, r):
@@ -14,15 +15,14 @@ def round_col(df, nom_col, r):
 
 def calc_mix():
 
-    total_scrap = sum(df_inventario['Uso'].tolist())
-    df_inventario['Mix'] = (df_inventario['Uso'] / total_scrap)*100
-    df_inventario['Costo'] = (df_inventario['Uso'] * df_inventario['Precio'])/1000000
-    df_inventario['Carga'] = (df_inventario['Mix'] * carga_eaf) / 100
+    total_scrap = sum(df_inventario['Carga'].tolist())
+    df_inventario['Mix'] = (df_inventario['Carga'] / total_scrap)*100
+    df_inventario['Costo'] = (df_inventario['Carga'] * df_inventario['Precio'])*n_coladas
+    df_inventario['Uso'] = (df_inventario['Carga']) * n_coladas
     df_inventario['Volumen'] = df_inventario['Carga'] / df_inventario['Densidad']
 
     round_col(df_inventario, 'Volumen',0)
     round_col(df_inventario, 'Mix', 2)
-    round_col(df_inventario, 'Carga', 0)
     round_col(df_inventario, 'Costo', 3)
 
 
@@ -38,7 +38,7 @@ def calc_contaminantes():
             sum = sum + l_carga[x]*l_cont[x]
 
         l_cvalue.append(round(sum/35,3))
-        print("Contenido de", col, ":", round(sum/carga_eaf,3))
+        print("Contenido de", col, ":", round(sum/carga_eaf,6))
 
     df_cont = pd.DataFrame(list(zip(l_cvalue)), columns=['Valor'], index=l_col )
     return(df_cont)
@@ -60,26 +60,21 @@ def calc_cesta(inventario):
     l_sorted_peso = df_sdensidadmax['Carga'].tolist()
     l_peso = inventario['Carga'].tolist()
 
-    liv_min = 2
-    liv_max = 4
+    liv_min = 3
     ciz_min = 3
-    ciz_max = 5
 
     for cesta in range(num_cesta):
 
         l_cesta = []
+        l_vol_cesta = []
         x = 0
         nom_ces = str("Cesta N°"+str(cesta+1))
-
 
         for scrap in l_sorted_scrap:
 
             usindex = l_scrap.index(scrap)
 
-
             if scrap not in l_base_scrap:
-
-
 
                 if l_sorted_peso[x] <= carga_cesta-sum(l_cesta):
 
@@ -87,9 +82,7 @@ def calc_cesta(inventario):
                     l_sorted_peso[x] = l_sorted_peso[x]-scrap_load
                     l_peso[usindex] = l_peso[usindex]-scrap_load
                     l_cesta.append(scrap_load)
-
-
-
+                    l_vol_cesta.append(scrap_load/l_rho[x])
 
                 else:
 
@@ -97,8 +90,7 @@ def calc_cesta(inventario):
                     l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
                     l_peso[usindex] = l_peso[usindex] - scrap_load
                     l_cesta.append(scrap_load)
-
-
+                    l_vol_cesta.append(scrap_load / l_rho[x])
 
             else:
 
@@ -108,11 +100,9 @@ def calc_cesta(inventario):
                     l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
                     l_peso[usindex] = l_peso[usindex] - scrap_load
                     l_cesta.append(scrap_load)
-
+                    l_vol_cesta.append(scrap_load / l_rho[x])
 
                 else:
-
-
 
                     if scrap == 'LIVIANA':
 
@@ -120,6 +110,7 @@ def calc_cesta(inventario):
                         l_peso[usindex] = l_peso[usindex] - scrap_load
                         l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
                         l_cesta.append(scrap_load)
+                        l_vol_cesta.append(scrap_load / l_rho[x])
 
                     else:
 
@@ -127,13 +118,32 @@ def calc_cesta(inventario):
                         l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
                         l_peso[usindex] = l_peso[usindex] - scrap_load
                         l_cesta.append(scrap_load)
-
-
+                        l_vol_cesta.append(scrap_load / l_rho[x])
 
             x = x+1
 
-        volumen = 0
+        x = l_sorted_scrap.index('LIVIANA')
+        usindex = l_scrap.index('LIVIANA')
 
+        while sum(l_cesta) < 15 and l_peso[usindex]>0 and (sum(l_vol_cesta)+(1/l_rho[x])) < 26.6:
+
+            l_peso[usindex] = l_peso[usindex] - 1
+            l_sorted_peso[x] = l_sorted_peso[x] - 1
+            l_cesta[x] = l_cesta[x] + 1
+            l_vol_cesta[x] = l_vol_cesta[x]+1/l_rho[x]
+
+        x = l_sorted_scrap.index('CIZALLA')
+        usindex = l_scrap.index('CIZALLA')
+
+        while sum(l_cesta) < 15 and l_peso[usindex] > 0 and (sum(l_vol_cesta) + (1 / l_rho[x])) < 26.6:
+            l_peso[usindex] = l_peso[usindex] - 1
+            l_sorted_peso[x] = l_sorted_peso[x] - 1
+            l_cesta[x] = l_cesta[x] + 1
+            l_vol_cesta[x] = l_vol_cesta[x] + 1 / l_rho[x]
+
+
+
+        volumen = 0
         for i in range(len(l_cesta)):
             volumen = volumen+(l_cesta[i] / l_rho[i])
             volumen = round(volumen,1)
@@ -166,11 +176,16 @@ def calc_potencia(inventario):
 
 
 ##Input de datos operativos
+##31.2 = produccion acero solido
+
 prod_mes = int(input("Ingrese la producción mensual en toneladas: "))
 carga_eaf = 35.0
-vol_cesta = 28*0.95
+vol_cesta = 28*0.97
 carga_cesta = 15
 epsilon = 0
+prod_unit = 31.2
+n_coladas = prod_mes/prod_unit
+
 num_cesta = int(input("Ingrese el número máximo de cestas: "))
 
 ##Setear display del df
@@ -179,7 +194,7 @@ pd.set_option("display.max_rows", None, "display.max_columns", None, "display.ma
 
 ##Lectura hoja de cálculo mix
 df_inventario = pd.read_excel("Mix.xlsx", index_col=0, sheet_name='Inventario', usecols="A:G", nrows=8)
-df_comp = pd.read_excel('Mix.xlsx', sheet_name='Composicion', index_col=None, usecols='A:J', nrows=8)
+df_comp = pd.read_excel('Mix.xlsx', sheet_name='Composicion', index_col=0, usecols='A:J', nrows=8)
 df_res = (pd.read_excel('Mix.xlsx', sheet_name='Composicion', index_col=None, usecols='A:B', nrows=9, skiprows=11)).dropna()
 
 ##Formateo de datos de precios e inventarios para Simplex
@@ -196,18 +211,18 @@ l_res_nombre = df_res['Elementos'].tolist()
 
 
 ##Minimización del costo mediante Simplex
-sol_dir = Simplex.minimize(8, 23, l_precios, l_inv_ll, prod_mes, l_density, num_cesta, vol_cesta, carga_eaf, l_rend, df_comp, df_res, epsilon)
+sol_dir = Simplex.minimize(8, 23, l_precios, l_inv_ll, l_density, num_cesta, vol_cesta, carga_eaf, df_comp, df_res, epsilon,n_coladas)
 if 'min' in sol_dir:
     sol_dir.pop('min')
 
-L_uso = list(sol_dir.values())
-df_inventario['Uso'] = L_uso
-round_col(df_inventario, 'Uso',0)
-
+l_carga = list(sol_dir.values())
+df_inventario['Carga'] = l_carga
+round_col(df_inventario, 'Carga',0)
+print(df_inventario)
 ##Formateo de dataframe inventario
-calc_mix(prod_mes)
+calc_mix()
 produccion,ttt, power_on, potencia_unit, energia_el = calc_potencia(df_inventario)
-L_costo = df_inventario['Costo'].tolist()
+l_costo = df_inventario['Costo'].tolist()
 
 
 print("------------------RESULTADOS------------------")
@@ -218,7 +233,7 @@ num_load = Scrap_vol/vol_cesta
 
 
 ##Cálculo del costo por tonelada de chatarra
-Scrap_kpi = round((sum(L_costo)*1000000) / sum(L_uso),2)
+Scrap_kpi = sum(l_costo)/(sum(l_carga)*n_coladas)
 l_mix = df_inventario['Mix'].tolist()
 sum_rho = 0
 for x in range(len(l_mix)):
@@ -226,7 +241,9 @@ for x in range(len(l_mix)):
 
 rho_cesta = round(sum_rho,2)
 
-print("Costo por tonelada de chatarra:", Scrap_kpi,2,"$/ton")
+
+print("N° de Cestas:", num_load)
+print("Costo por tonelada de chatarra:", Scrap_kpi,"$/ton")
 print("Potencia requerida:",potencia_unit,"kWh/ton")
 print("Energía eléctrica consumida:", energia_el,"kWh")
 print("Power On:",power_on,"min")
@@ -242,6 +259,7 @@ df_contaminantes = calc_contaminantes()
 print("--------------------CESTAS--------------------")
 L_carga = df_inventario['Carga'].tolist()
 df_res = calc_cesta(df_inventario)
+
 pd.set_option('display.float_format', str)
 print(tabulate(df_res, headers='keys', tablefmt='psql'))
 
@@ -259,6 +277,7 @@ l_ind_si = ["$/ton","kWh/ton","kWh","min","min","ton/h","ton/m3"]
 
 df_indicadores = pd.DataFrame(list(zip(l_ind_val,l_ind_si)),columns=['Valores','Unidades'],index=l_indicadores)
 
+df_res.columns = ['Precio [$/ton]', 'Densidad [ton/m3]', 'Inventario [ton/mes]','Lifeline','Rendimiento','Potencia [kWh/ton]','Uso [ton/mes]','Mix','Costo [MM USD]','Carga [ton]','Volumen [m3]','Cesta N°1 [ton]','Cesta N°2 [ton]','Cesta N°3 [ton]']
 
 
 workbook = opy.Workbook()
@@ -266,8 +285,14 @@ worksheet = workbook.active
 worksheet.title = 'Reporte'
 worksheet['A1'] = "REPORTE DE SIMULACIÓN"
 worksheet.column_dimensions['A'].width =20
-workbook.save('Reporte.xlsx')
 
+worksheet.sheet_view.showGridLines = False
+workbook.save('Reporte.xlsx')
+font = Font(name='Calibri', size=11,bold=False,italic=False,vertAlign=None,underline='none',strike=False,color='FF000000')
+worksheet.font = font
+
+#Amo a majo UwU
+workbook.save('Reporte.xlsx')
 book = opy.load_workbook('Reporte.xlsx')
 writer = pd.ExcelWriter('Reporte.xlsx', engine='openpyxl')
 writer.book = book
@@ -277,7 +302,7 @@ writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
 df_indicadores.to_excel(writer, 'Reporte', startrow= 2)
 df_res.to_excel(writer,'Reporte', startrow=11)
 df_contaminantes.to_excel(writer, 'Reporte', startrow= 21)
-worksheet['A13'] = "Concentración de contaminantes"
+worksheet['A21'] = "Concentración de contaminantes"
 
 
 
