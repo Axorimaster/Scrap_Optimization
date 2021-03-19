@@ -7,7 +7,6 @@ def gen_matrix(var, cons):
 
 
 def next_round_r(table):
-
     m = min(table[:-1, -1])
     if m >= 0:
         return False
@@ -18,6 +17,7 @@ def next_round_r(table):
 def next_round(table):
     lr = len(table[:, 0])
     m = min(table[lr - 1, :-1])
+
     if m >= 0:
         return False
     else:
@@ -74,6 +74,7 @@ def loc_piv(table):
 
 
 def pivot(row, col, table):
+
     lr = len(table[:, 0])
     lc = len(table[0, :])
     t = np.zeros((lr, lc))
@@ -90,13 +91,13 @@ def pivot(row, col, table):
             else:
                 t[i, :] = list(k - r * c)
         t[row, :] = list(r)
+        minz.num_pivot = minz.num_pivot + 1
         return t
     else:
-        print('Cannot pivot on this element.')
+        print('Cannot pivot on this element')
 
 
 def convert(eq):
-
     if 'G' in eq:
         g = eq.index('G')
         del eq[g]
@@ -122,11 +123,13 @@ def gen_var(table):
     v = []
     for i in range(var):
         v.append('x' + str(i + 1))
+
     return v
 
 
 def add_cons(table):
     lr = len(table[:, 0])
+
     empty = []
     for i in range(lr):
         total = 0
@@ -142,6 +145,7 @@ def add_cons(table):
 
 def constrain(table, eq):
     global row
+
     if add_cons(table):
         lc = len(table[0, :])
         lr = len(table[:, 0])
@@ -163,8 +167,9 @@ def constrain(table, eq):
             i += 1
         row[-1] = eq[-1]
         row[var + j] = 1
+
     else:
-        print('Cannot add another constraint.')
+        print("Cannot add another constraint.")
 
 
 def add_obj(table):
@@ -200,47 +205,53 @@ def obj(table, eq):
 def minz(table):
     table = convert_min(table)
 
-    while next_round_r(table):
+
+    minz.num_pivot = 0
+
+    while next_round_r(table) and minz.num_pivot <= 5000:
         table = pivot(loc_piv_r(table)[0], loc_piv_r(table)[1], table)
-    while next_round(table):
+
+    while next_round(table) and minz.num_pivot <= 5000:
         table = pivot(loc_piv(table)[0], loc_piv(table)[1], table)
-    lc = len(table[0, :])
-    lr = len(table[:, 0])
-    var = lc - lr - 1
-    val = {}
-    for i in range(var):
-        col = table[:, i]
-        s = sum(col)
-        m = max(col)
 
+    if minz.num_pivot <= 5000:
 
-        if float(s) == float(m):
-            loc = np.where(col == m)[0][0]
-            val[gen_var(table)[i]] = table[loc, -1]
+        lc = len(table[0, :])
+        lr = len(table[:, 0])
+        var = lc - lr - 1
+        val = {}
+        for i in range(var):
+            col = table[:, i]
+            s = sum(col)
+            m = max(col)
 
-        else:
-            val[gen_var(table)[i]] = 0
-            val['min'] = table[-1, -1] * -1
+            if float(s) == float(m):
+                loc = np.where(col == m)[0][0]
+                val[gen_var(table)[i]] = table[loc, -1]
 
+            else:
+                val[gen_var(table)[i]] = 0
+                val['min'] = table[-1, -1] * -1
 
+        return val
 
-    return val
+    else:
+        minimize.err = True
 
 
 def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, load_eaf, df_comp, df_res, epsilon, coladas):
-
     m = gen_matrix(n_var, n_cons)
     inv_cons = np.identity(n_var)
     inv_arr = np.array(invetarios)
-    inv_cons = np.append(inv_cons,inv_arr.reshape(8,1),axis=1)
+    inv_cons = np.append(inv_cons, inv_arr.reshape(n_var, 1), axis=1)
 
     l_res_cons = df_res['Max'].tolist()
     l_res_name = df_res['Elementos'].tolist()
 
     for x in range(n_var):
         l_cons = inv_cons[x].tolist()
-        l_cons[x] = l_cons[x]*coladas
-        l_cons.insert(n_var,"L")
+        l_cons[x] = l_cons[x] * coladas
+        l_cons.insert(n_var, "L")
 
         constrain(m, l_cons)
 
@@ -248,27 +259,28 @@ def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, l
         l_cons_zero = inv_cons[x].tolist()
         l_cons_zero.pop(n_var)
         l_cons_zero.append("G")
-        l_cons_zero.append(0)
+        l_cons_zero.append(0.01)
         constrain(m, l_cons_zero)
 
-    prod_cons = [1,1,1,1,1,1,1,1]
+    prod_cons = []
+    for x in range(n_var):
+        prod_cons.append(1)
+
     prod_cons_top = prod_cons.copy()
     prod_cons_bot = prod_cons.copy()
     prod_cons_top.append("G")
     prod_cons_bot.append("L")
-    prod_cons_top.append(load_eaf-0.01)
-    prod_cons_bot.append(load_eaf+0.01)
-
+    prod_cons_top.append(load_eaf - 0.1)
+    prod_cons_bot.append(load_eaf + 0.1)
     constrain(m, prod_cons_top)
     constrain(m, prod_cons_bot)
 
-
-    vol_cons =[]
+    vol_cons = []
     for x in range(n_var):
-        vol_cons.append(1/(densidad[x]*vol_cesta))
+        vol_cons.append((1 / (densidad[x] * vol_cesta))*10)
     vol_cons.append("L")
-    vol_cons.append((n_cesta-epsilon))
-    constrain(m,vol_cons)
+    vol_cons.append((n_cesta - epsilon)*10)
+    constrain(m, vol_cons)
 
     for x in range(len(l_res_cons)):
 
@@ -285,11 +297,7 @@ def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, l
         l_cons_res.append(max)
         constrain(m, l_cons_res)
 
-
-
     obj(m, precios)
+    minimize.err = False
 
-    return (minz(m))
-
-
-
+    return (minz(m), minimize.err)
