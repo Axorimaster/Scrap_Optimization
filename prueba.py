@@ -1,7 +1,7 @@
 import sqlite3
 from pandastable import Table
 import pandas as pd
-from tkslider import *
+import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import messagebox
 from PIL import ImageTk, Image
@@ -26,12 +26,14 @@ sb_v.pack(fill=tk.Y, side=tk.RIGHT, expand= tk.FALSE)
 container.pack(fill=tk.BOTH, side=tk.LEFT, expand=tk.TRUE)
 container.create_window(0,0, window=main_frame, anchor=tk.NW)
 
+
 #Funciones
 def update_df_inventario():
     df_inventario = pd.read_sql_query("SELECT * FROM scrap_data", conn)
     l_comp_scrap_names = df_inventario['Nombre'].tolist()
 
     return l_comp_scrap_names
+
 
 def update_df_comp():
     df_comp = pd.read_sql_query("SELECT * FROM comp_data", conn)
@@ -164,7 +166,6 @@ def cb(event):
     raise_frame(next_frame_name)
 
 
-
 ###
 def inv_save_sql():
 
@@ -272,6 +273,7 @@ def comp_submit():
         comp_mo_e.delete(0, tk.END)
 
         comp_query()
+
 
 ##
 def inv_query():
@@ -386,15 +388,8 @@ def comp_print_name(*args):
 
         comp_scrapname_label.configure(text=' ')
 
-        comp_c_e.config(state='disabled')
-        comp_mn_e.config(state='disabled')
-        comp_si_e.config(state='disabled')
-        comp_p_e.config(state='disabled')
-        comp_cr_e.config(state='disabled')
-        comp_s_e.config(state='disabled')
-        comp_cu_e.config(state='disabled')
-        comp_ni_e.config(state='disabled')
-        comp_mo_e.config(state='disabled')
+        for entry in l_comp_entries:
+            entry.config(state='disabled')
 
 
 def gen_slides():
@@ -404,6 +399,9 @@ def gen_slides():
     l_inv_names = df_inventario['Nombre'].tolist()
     gen_slides.l_inv_valid = []
     l_inv_valid_name = []
+
+    for widget in res_llframe.winfo_children():
+        widget.destroy()
 
     for x in range(len(df_inventario)):
         l_inv_values[x] = float(l_inv_values[x])
@@ -416,31 +414,37 @@ def gen_slides():
     inv_n_scraps.set(len(gen_slides.l_inv_valid))
 
     gen_slides.l_res_slides = []
-    col = 0
+    gen_slides.l_res_sl_lb = []
+    row = 0
 
     for x in range(inv_n_scraps.get()):
-        slide = tk.Scale(res_tframe, orient='vertical', tickinterval=100, from_=100, to=0, resolution=5, showvalue=True, digits=0, sliderlength=15, label=l_inv_valid_name[x], command=res_calc_inv)
+        slide = tk.Scale(res_llframe, orient='horizontal', tickinterval=100, from_=0, to=100, resolution=5, showvalue=True, digits=0, sliderlength=15, label=l_inv_valid_name[x], command=res_calc_inv)
         slide.set(100)
-        slide.grid(row=0, column=col, padx=10, pady=5)
+        slide.grid(row=row, column=0, padx=10, pady=2)
+        label = tk.Label(res_llframe, text=(slide.get()*gen_slides.l_inv_valid[x])/100)
+        label.grid(row=row, column=1)
 
-        """
-        s_label = tk.Label(res_tframe, text=l_inv_valid_name[x])
-        s_label.grid(row=1, column=col, padx=10, pady=5)
-        """
-
-        col += 1
+        row += 1
         gen_slides.l_res_slides.append(slide)
+        gen_slides.l_res_sl_lb.append(label)
 
 
 def res_calc_inv(*args):
 
     sum = 0
     x = 0
+
     for slide in gen_slides.l_res_slides:
         porcentaje = (slide.get())/100
         inv = gen_slides.l_inv_valid[x]
-        inv_ll = round(porcentaje*inv, 0)
+        inv_ll = round(porcentaje*inv,0)
+        slide = gen_slides.l_res_sl_lb[x]
+        slide.config(text=inv_ll)
+
         sum+=inv_ll
+
+
+        x += 1
 
     res_invll_lb.config(text=sum)
 
@@ -670,10 +674,22 @@ res_bframe.grid(row=1, column=1, sticky='nsew')
 res_bframe.grid_propagate(False)
 res_tframe =tk.LabelFrame(res_frame, padx=10, pady=10, height=445, width=858)
 res_tframe.grid(row=1, column=2)
-res_tframe.grid_propagate(False)
+res_tframe.pack_propagate(False)
 
-res_invll_lb = tk.Label(res_tframe, text=res_calc_inv)
-res_invll_lb.grid(row=2, column=2)
+res_ll_cn = tk.Canvas(res_tframe)
+res_cn_scb = ttk.Scrollbar(res_tframe, orient='vertical', command=res_ll_cn.yview)
+res_llframe = tk.Frame(res_ll_cn)
+
+res_llframe.bind('<Configure>', lambda e: res_ll_cn.configure(scrollregion=res_ll_cn.bbox('all')))
+res_ll_cn.create_window((0,0), window=res_llframe, anchor='nw')
+
+res_ll_cn.pack(side='left', fill='both', expand=True)
+res_cn_scb.pack(side='right', fill='y')
+
+res_invll_lb = tk.Label(res_bframe, text=res_calc_inv)
+res_invll_lb.grid(row=0, column=1)
+
+
 
 
 root.bind("<Configure>", updateScroll())
