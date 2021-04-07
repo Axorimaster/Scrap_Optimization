@@ -1,12 +1,11 @@
 import pandas as pd
 import Simplex
-from tabulate import tabulate
 import openpyxl as opy
 from openpyxl.styles import Alignment
 import math
 import string
 import numpy as np
-
+from decimal import Decimal, ROUND_DOWN
 
 def round_col(df, nom_col, r):
     l_round = df[nom_col].tolist()
@@ -21,32 +20,33 @@ def round_col(df, nom_col, r):
     df[nom_col] = lista
 
 
-def calc_mix(n_coladas):
+def calc_mix(n_coladas, df_inventario):
 
     total_scrap = sum(df_inventario['Carga'].tolist())
     df_inventario['Mix'] = (df_inventario['Carga'] / total_scrap) * 100
     df_inventario['Costo'] = ((df_inventario['Carga'] * df_inventario['Precio']) * n_coladas) / 1000000
     df_inventario['Uso'] = (df_inventario['Carga']) * n_coladas
     df_inventario['Volumen'] = df_inventario['Carga'] / df_inventario['Densidad']
-
     round_col(df_inventario, 'Volumen', 1)
     round_col(df_inventario, 'Mix', 2)
     round_col(df_inventario, 'Costo', 3)
     round_col(df_inventario, 'Uso', 0)
 
+    return(df_inventario)
 
-def calc_nconstrains():
+
+def calc_nconstrains(df_residual, df_inventario):
 
     residual_cons = len(df_residual)
     var_const = 2*len(df_inventario)
     prod_constrain = 2
     vol_constrain = 1
-    n_constrain = residual_cons+prod_constrain+var_const+vol_constrain
+    n_constrain = residual_cons+prod_constrain+var_const+vol_constrain+1
 
     return n_constrain
 
 
-def calc_contaminantes(carga_eaf):
+def calc_contaminantes(carga_eaf, df_inventario, df_comp):
 
     l_carga = df_inventario['Carga'].tolist()
     l_col = list(df_comp.columns)
@@ -58,28 +58,33 @@ def calc_contaminantes(carga_eaf):
         for x in range(len(l_carga)):
             suma = suma + l_carga[x] * l_cont[x]
 
-        l_cvalue.append(round(suma / 35, 3))
+        l_cvalue.append(round(suma / carga_eaf, 3))
         print("Contenido de", col, ":", round(suma / carga_eaf, 6))
 
     df_cont = pd.DataFrame(list(zip(l_cvalue)), columns=['Valor'], index=l_col)
     return df_cont
 
 
-def complete_cesta(l_sorted_scrap, l_scrap, l_cesta, l_peso, l_vol_cesta, l_rho, l_sorted_peso, n_base):
+def complete_cesta(l_sorted_scrap, l_scrap, l_cesta, l_peso, l_vol_cesta, l_rho, l_sorted_peso, n_base, vol_cesta, carga_cesta):
 
     x = l_sorted_scrap.index(n_base)
     usindex = l_scrap.index(n_base)
 
-    while sum(l_cesta) < 15 and l_peso[usindex] > 0 and (sum(l_vol_cesta) + (1 / l_rho[x])) < 26.6:
+    while sum(l_cesta) < carga_cesta and l_peso[usindex] > 0 and (sum(l_vol_cesta) + (1 / l_rho[x])) < vol_cesta:
         l_peso[usindex] = l_peso[usindex] - 1
         l_sorted_peso[x] = l_sorted_peso[x] - 1
         l_cesta[x] = l_cesta[x] + 1
         l_vol_cesta[x] = l_vol_cesta[x] + 1 / l_rho[x]
 
 
-def calc_cesta(num_cestas, carga_cesta, vol_cesta, n_var):
+def calc_cesta(num_cestas, carga_cesta, vol_cesta, n_var, df_inventario, base_scrap_dict):
 
-    def fill_basket():
+    global vol_cesta_mod
+
+    def fill_basket(vol_min, load_min):
+
+        load_min_cesta = load_min
+        vol_min_cesta = vol_min
 
         x = 0
         l_cesta = []
@@ -94,43 +99,43 @@ def calc_cesta(num_cestas, carga_cesta, vol_cesta, n_var):
 
             elif scrap not in l_base_scrap:
 
-                if l_sorted_peso[x] <= carga_cesta - sum(l_cesta) and ((l_sorted_peso[x]/l_rho_sorted[x]) <= vol_cesta - sum(l_vol_cesta)):
+                if l_sorted_peso[x] <= (carga_cesta - sum(l_cesta)-load_min_cesta) and ((l_sorted_peso[x]/l_rho_sorted[x]) <= vol_cesta_mod - sum(l_vol_cesta) - vol_min_cesta):
 
-                    scrap_load = l_peso[usindex]
+                    scrap_load = l_sorted_peso[x]
 
                 else:
 
-                    scrap_load = carga_cesta - sum(l_cesta)
+                    scrap_load_carga = carga_cesta - sum(l_cesta) - load_min_cesta
+                    scrap_load_vol = round((vol_cesta_mod - sum(l_vol_cesta) - vol_min_cesta)*(l_rho_sorted[x]),0)
+
+                    if scrap_load_carga > scrap_load_vol:
+                        scrap_load = scrap_load_vol
+                        if scrap_load < 0:
+                            scrap_load = 0
+                    else:
+                        scrap_load = scrap_load_carga
+                        if scrap_load < 0:
+                            scrap_load = 0
 
             else:
 
                 if cesta + 1 == num_cestas:
 
                     scrap_load = l_peso[usindex]
+                    vol_min_cesta = vol_min_cesta - (base_scrap_dict[scrap] / df_inventario.loc[scrap, 'Densidad'])
+                    load_min_cesta = load_min_cesta - base_scrap_dict[scrap]
 
                 else:
 
-                    if scrap == 'LIVIANA':
+                    if l_sorted_peso[x] < base_scrap_dict[scrap]:
 
-                        if l_sorted_peso[x] < liv_min:
-
-                            scrap_load = l_sorted_peso[x]
-
-                        else:
-
-                            scrap_load = liv_min
+                        scrap_load = l_sorted_peso[x]
 
                     else:
 
-                        if l_sorted_peso[x] < ciz_min:
-
-                            scrap_load = l_sorted_peso[x]
-
-                        else:
-                            if ciz_min <= carga_cesta-sum(l_cesta):
-                                scrap_load = ciz_min
-                            else:
-                                scrap_load = carga_cesta-sum(l_cesta)
+                        scrap_load = base_scrap_dict[scrap]
+                        vol_min_cesta = vol_min_cesta - (base_scrap_dict[scrap] / df_inventario.loc[scrap, 'Densidad'])
+                        load_min_cesta = load_min_cesta - base_scrap_dict[scrap]
 
             scrap_load = round(scrap_load, 0)
             l_sorted_peso[x] = l_sorted_peso[x] - scrap_load
@@ -139,6 +144,7 @@ def calc_cesta(num_cestas, carga_cesta, vol_cesta, n_var):
             l_vol_cesta.append(scrap_load / l_rho_sorted[x])
 
             x = x + 1
+
 
         return l_cesta, l_vol_cesta
 
@@ -149,57 +155,94 @@ def calc_cesta(num_cestas, carga_cesta, vol_cesta, n_var):
 
     l_nom_cestas = []
     l_peso = df_inventario['Carga'].tolist()
-    df_base_scrap = df_inventario[df_inventario.Densidad <= 0.5]
+
+
     l_scrap = list(df_inventario.index.values)
-    df_inventario.sort_values(by=['Potencia'], ascending=False,inplace=True)
+    df_inventario.sort_values(by=['Energia'], ascending=False,inplace=True)
 
     l_rho_sorted = df_inventario['Densidad'].tolist()
-    l_pot_sorted = df_inventario['Potencia'].tolist()
+    l_pot_sorted = df_inventario['Energia'].tolist()
 
-    l_base_scrap = list(df_base_scrap.index.values)
+    l_base_scrap = [*base_scrap_dict]
+
+    df_base_scrap = df_inventario.loc[l_base_scrap, :]
+    df_base_scrap.sort_values(by=['Densidad'], ascending=False, inplace=True)
+    l_sorted_base_scrap = list(df_base_scrap.index.values)
+    print(df_base_scrap)
+
     l_sorted_scrap = list(df_inventario.index.values)
 
     l_sorted_peso = df_inventario['Carga'].tolist()
 
-    liv_min = 2
-    ciz_min = 3
+    l_base_scrap_indx = []
+
+    vol_min = 0
+
+    for scrap in l_base_scrap:
+
+        base_scrap_indx = l_sorted_scrap.index(scrap)
+        l_base_scrap_indx.append(base_scrap_indx)
+
+        if l_sorted_peso[base_scrap_indx] == 0:
+            base_scrap_dict[scrap] = 0
+
+        base_scrap_rho = df_inventario.loc[scrap, 'Densidad']
+
+        vol_min += base_scrap_dict[scrap]/base_scrap_rho
+
+    load_min = sum(list(base_scrap_dict.values()))
 
     l_kpi_cestas = []
+    last_cesta = 0
 
     for cesta in range(num_cestas):
 
+        if cesta == 0:
+            vol_cesta_mod = vol_cesta*0.97
+        else:
+            vol_cesta_mod = vol_cesta*0.95
+
         nom_ces = str("Cesta N°" + str(cesta + 1))
 
-        l_cesta, l_vol_cesta = fill_basket()
+        l_cesta, l_vol_cesta = fill_basket(vol_min, load_min)
 
-        n_base = 'CIZALLA'
-        complete_cesta(l_sorted_scrap, l_scrap, l_cesta, l_peso, l_vol_cesta, l_rho_sorted, l_sorted_peso, n_base)
-        n_base = 'LIVIANA'
-        complete_cesta(l_sorted_scrap, l_scrap, l_cesta, l_peso, l_vol_cesta, l_rho_sorted, l_sorted_peso, n_base)
+        for base_scrap in l_sorted_base_scrap:
+
+            complete_cesta(l_sorted_scrap, l_scrap, l_cesta, l_peso, l_vol_cesta, l_rho_sorted, l_sorted_peso, base_scrap, vol_cesta_mod, carga_cesta)
 
         df_inventario[nom_ces] = l_cesta
         round_col(df_inventario, nom_ces, 0)
 
         l_nom_cestas.append(nom_ces)
         l_kpi = kpi_cestas(df_inventario[nom_ces].tolist(), l_rho_sorted,l_pot_sorted)
-
         l_kpi_cestas.append(l_kpi)
+
+        if cesta+1 == num_cestas:
+            last_cesta=nom_ces
+
 
     l_col = ['Peso [ton]', 'Volumen [m3]', 'Densidad [ton/m3]', 'Energía [kWh]']
     df_cestas = pd.DataFrame(l_kpi_cestas, columns=l_col, index=l_nom_cestas)
 
     for x in l_col:
-        round_col(df_cestas,x,2)
+        round_col(df_cestas,x,4)
 
     df_inventario.sort_values(by=['Index'], inplace=True)
     df_inventario.drop(columns=['Index'], inplace=True)
+    err = False
 
-    return (df_cestas)
+    if df_cestas.at[last_cesta, 'Volumen [m3]'] > vol_cesta_mod:
+
+        err = True
 
 
-def calc_potencia(inventario, carga_eaf):
-    l_potencia_unit = ((inventario['Potencia'] * inventario['Mix'])/100).tolist()
-    rend_ef = sum(((inventario['Rendimiento'] * inventario['Mix'])/100).tolist())
+    return (df_cestas, err)
+
+
+def calc_potencia(carga_eaf, df_inventario):
+
+    l_potencia_unit = ((df_inventario['Energia'] * df_inventario['Mix'])/100).tolist()
+    rend_ef = sum(((df_inventario['Rendimiento'] * df_inventario['Mix'])/100).tolist())
 
     p_scrap = sum(l_potencia_unit)
     p_escoria = (30 * p_scrap) / 455
@@ -216,7 +259,7 @@ def calc_potencia(inventario, carga_eaf):
     return round(p, 1), round(ttt, 1), round(p_on, 1), round(p_total), round(e_el)
 
 
-def gen_report(prod_mes, n_coladas, Scrap_kpi, potencia_unit, energia_el, power_on, ttt, steel, rho_cesta, num_cestas, n_var, df_contaminantes, df_cestas):
+def gen_report(prod_mes, n_coladas, Scrap_kpi, potencia_unit, energia_el, power_on, ttt, steel, rho_cesta, num_cestas, n_var, df_contaminantes, df_cestas, df_inventario):
 
     l_alphabet = list(string.ascii_uppercase)
     l_indicadores = ['Acero Sólido', 'N° Coladas', "Costo", "Potencia", "E_el", "P_on", "TTT", "Produccion", "Densidad"]
@@ -289,25 +332,8 @@ def gen_report(prod_mes, n_coladas, Scrap_kpi, potencia_unit, energia_el, power_
     workbook.save('Reportes/Reporte.xlsx')
 
 
-def check_inv(l_inv_ll, l_rend):
+def check_carga(l_carga, carga_eaf, df_inventario):
 
-    prod_mes = int(input("Ingrese la producción mensual en toneladas: "))
-    inv_total = [a * b for a, b in zip(l_inv_ll, l_rend)]
-
-    if sum(inv_total) < prod_mes:
-
-        prod_max = sum(inv_total)
-        prod_max = round((prod_max-500)/ 10000, 2) * 10000
-        print("Inventario insuficiente. El mix se prepará para la mayor producción posible:", prod_max)
-        return prod_max
-
-    else:
-
-        print("Inventario correcto.")
-        return prod_mes
-
-
-def check_carga(l_carga, carga_eaf):
 
     l_carga_round = [round(c,0) for c in l_carga]
     l_dec = []
@@ -346,184 +372,91 @@ def check_carga(l_carga, carga_eaf):
             l_carga_round[indx] = l_carga_round[indx] - 1
 
     df_inventario['Carga'] = l_carga_round
-    print("Carga normalizada.")
 
 
 def kpi_cestas(l_cesta,l_rho_sorted, l_pot_sorted):
 
     peso_cesta = (sum(l_cesta))
     volumen_cesta = sum([a/b for a,b in zip(l_cesta,l_rho_sorted)])
+
     if volumen_cesta == 0:
         densidad_cesta = 0
     else:
         densidad_cesta = peso_cesta/volumen_cesta
-    energia_cesta = sum([a*b for a,b in zip(l_cesta,l_pot_sorted)])
+
+    energia_cesta = sum([round(a,0)*b for a,b in zip(l_cesta,l_pot_sorted)])
 
     l_kpi = [peso_cesta,volumen_cesta,densidad_cesta,energia_cesta]
 
     return l_kpi
 
 
-def calc_melting(df_cestas, num_cestas, df_inventario, rho_mix):
+def main(df_inventario, df_comp, num_cestas, input_inv, l_lifeline, epsilon, base_scrap_dict, carga_eaf, vol_cesta, carga_cesta, n_coladas):
 
-    l_vol = df_cestas['Volumen [m3]']
-    l_densidad = df_cestas['Densidad [ton/m3]']
-    l_peso = df_cestas['Peso [ton]']
-    l_energia = df_cestas['Energía [kWh]']
+    df_residual = (pd.read_excel('Mix.xlsx', sheet_name='Composicion', index_col=None, usecols='A:B', nrows=9,
+                                 skiprows=11)).dropna()
 
-    l_potencia = df_inventario['Potencia']
-    l_carga = df_inventario['Carga']
-    e_mix = sum([a * b for a, b in zip(l_potencia, l_carga)])
+    try:
+        df_inventario = df_inventario.set_index('Nombre')
+        df_comp = df_comp.set_index('Nombre')
+    except:
+        pass
 
-    l_melt_load = []
-    l_vol_req = []
-    l_energia_req =[]
-    l_pon = []
-    l_e_quim_esp = []
-    l_e_quim = []
-    l_flux_o2 = []
-    l_el_esp = []
-    l_el = []
+    df_mix = pd.concat([df_inventario,df_comp], axis=1, join='inner')
+    df_mix = df_mix[df_mix.Inventario != '0']
 
-    melting_factor = 0.70
-    vol_factor = 0.05
-    pot_cesta = 28.16
-    ox_flux = 65
-    e_reaccion = 4.4
-    kt_factor = 0.70
+    try:
+        df_mix.insert(2, 'Lifeline',l_lifeline)
+    except:
+        pass
 
-    ox_flux_afino = 70
-    pot_afino = 34
-    e_reaccion_afino = 8.7
+    df_mix = np.split(df_mix, [6], axis=1)
+    df_inventario = df_mix[0]
 
-    for x in range(num_cestas):
+    df_comp = df_mix[1]
 
-        rho_cesta = l_densidad[x]
-        peso_cesta = l_peso[x]
+    for column in df_inventario.columns.tolist():
+        df_inventario[column] = df_inventario[column].astype(float)
 
-        if x+1 == num_cestas:
+    for column in df_comp.columns.tolist():
+        df_comp[column] = df_comp[column].astype(float)
 
-            vol_req = l_vol[x]*(1+vol_factor)
-            melt_load = vol_req * rho_cesta
+    df_reserva = df_inventario.copy()
 
-        else:
-
-            vol_req = l_vol[x+1]*(1+vol_factor)
-            melt_load = vol_req*rho_cesta
+    ##### VARIABLES #####
 
 
-
-        if melt_load > peso_cesta:
-            l_melt_load.append(peso_cesta)
-        else:
-            l_melt_load.append(melt_load)
-
-        energia_req = (l_melt_load[x] * l_energia[x] * melting_factor) / peso_cesta
-        l_energia_req.append(energia_req)
-
-        l_vol_req.append(vol_req)
-
-        q_factor = ox_flux*kt_factor*e_reaccion
-        el_factor = (pot_cesta/60)*1000
-
-        p_on_cesta = energia_req / (q_factor + el_factor)
-
-        l_pon.append(p_on_cesta)
-
-        ox_cesta = p_on_cesta * ox_flux
-        e_quim_cesta = (ox_cesta * kt_factor * e_reaccion)
-        e_quim_cesta_esp = e_quim_cesta/peso_cesta
-
-        l_flux_o2.append(ox_cesta)
-        l_e_quim_esp.append(e_quim_cesta_esp)
-        l_e_quim.append(e_quim_cesta)
-
-        e_el_esp = (energia_req - e_quim_cesta) / peso_cesta
-        l_el_esp.append(e_el_esp)
-        l_el.append(energia_req - e_quim_cesta)
-
-    e_melting = sum(l_energia_req)
-    e_afino = e_mix - e_melting
-    t_afino = e_afino/((ox_flux_afino*kt_factor*e_reaccion_afino)+((pot_afino/60)*1000))
-    e_quim_esp_afino = (ox_flux_afino*kt_factor*e_reaccion_afino*t_afino)/sum(l_peso)
-    e_quim_afino = e_quim_esp_afino*sum(l_peso)
-    e_el_esp_afino = (e_afino-e_quim_esp_afino)/sum(l_peso)
-    e_el_afino = e_el_esp_afino*sum(l_peso)
-    o2_afino = t_afino * ox_flux_afino
-
-    e_quim_mix = sum(l_e_quim)
-    e_el_mix = sum(l_el)
-
-    df_cestas['Volumen requerido [m3]'] = l_vol_req
-    df_cestas['Peso a fundir [ton]'] = l_melt_load
-    df_cestas['Energía requerida [kWh]'] = l_energia_req
-    df_cestas['Energía química específica [kWh/ton]'] = l_e_quim_esp
-    df_cestas['Energía eléctrica específica [kWh/ton]'] = l_el_esp
-    df_cestas['Power On [min]'] = l_pon
-    df_cestas['Flujo de O2 [m3]'] = l_flux_o2
+    prod_mes = input_inv
 
 
-    round_col(df_cestas, 'Volumen requerido [m3]', 2)
-    round_col(df_cestas, 'Peso a fundir [ton]', 2)
-    round_col(df_cestas, 'Energía requerida [kWh]', 0)
-    round_col(df_cestas, 'Energía química específica [kWh/ton]', 1)
-    round_col(df_cestas, 'Energía eléctrica específica [kWh/ton]', 1)
-    round_col(df_cestas, 'Power On [min]', 1)
-    round_col(df_cestas, 'Flujo de O2 [m3]', 2)
-
-    df_cestas.drop('Energía [kWh]', axis=1, inplace=True)
-    df_cestas = df_cestas.transpose()
-
-    e_quim_esp_total = (e_quim_afino+e_quim_mix)/sum(l_peso)
-    e_el_total = (e_el_afino+e_el_mix)/sum(l_peso)
-    ox_total = o2_afino + sum(l_flux_o2)
-    p_on_total = sum(l_pon) + t_afino
-
-    l_afino = [sum(l_peso), " ", rho_mix, " ", " ", e_afino, e_quim_esp_afino, e_el_esp_afino, t_afino, o2_afino]
-    l_total = [" ", " ", " ", " ", " ", e_mix, e_quim_esp_total, e_el_total, p_on_total, ox_total]
-    df_cestas['Afino'] = l_afino
-    round_col(df_cestas, 'Afino', 2)
-    df_cestas['Total'] = l_total
-    round_col(df_cestas, 'Total', 2)
-
-    print(tabulate(df_cestas, headers='keys', tablefmt='psql'))
-    return(df_cestas)
-
-
-def main(df_inventario, df_comp, df_residual):
-
-    carga_eaf = 35.0
-    vol_cesta = 28 * 0.95
-    carga_cesta = 15
-    epsilon = 0
-    prod_unit = 31.2
-    hot_heel = 6
-    eaf_vol = 30
-    rho_steel = 7
-
-    num_cestas = int(input("Ingrese el número máximo de cestas: "))
 
     ##Setear display del df
     pd.set_option("display.max_rows", None, "display.max_columns", None, "display.max_colwidth", 200)
 
     ##Lectura hoja de cálculo mix
-    n_cons = calc_nconstrains()
+    n_cons = calc_nconstrains(df_residual, df_inventario)
     n_var = len(df_inventario)
 
     ##Formateo de datos de precios e inventarios para Simplex
 
     l_precios = df_inventario['Precio'].tolist()
     l_precios.append(0)
+    l_precios = list(map(float, l_precios))
     l_inv = df_inventario['Inventario'].tolist()
-    l_lifeline = df_inventario['Lifeline'].tolist()
+    l_inv = list(map(float,l_inv))
     l_density = df_inventario['Densidad'].tolist()
+    l_density = list(map(float, l_density))
     l_rend = df_inventario['Rendimiento'].tolist()
-    l_inv_ll = list(map(lambda x, y: x - (x * y), l_inv, l_lifeline))
+    l_rend = list(map(float, l_rend))
+    l_energia = df_inventario['Energia'].tolist()
+    l_energia = list(map(float, l_energia))
+    l_inv_ll = list(map(lambda x, y: x * y, l_inv, l_lifeline))
 
-    prod_mes = check_inv(l_inv_ll, l_rend)
-    n_coladas = prod_mes / prod_unit
+    ##Cálculo de número de coladas por mes
+
 
     ##Minimización del costo mediante Simplex
+    """
     err = True
 
     while err:
@@ -539,77 +472,114 @@ def main(df_inventario, df_comp, df_residual):
         else:
             print("Número de cestas correcto.")
             err = False
+    """
 
     sol_dir, err = Simplex.minimize(n_var, n_cons, l_precios, l_inv_ll, l_density, num_cestas, vol_cesta, carga_eaf, df_comp,
                                     df_residual, epsilon, n_coladas)
-    if 'min' in sol_dir:
-        sol_dir.pop('min')
+
+    if err:
+        return True
+
+    else:
+        if 'min' in sol_dir:
+            sol_dir.pop('min')
 
     l_carga = list(sol_dir.values())
     df_inventario['Carga'] = l_carga
-    check_carga(l_carga, carga_eaf)
+
+
+    ##Normalización de los resultados de Simplex
+
+    check_carga(l_carga, carga_eaf, df_inventario)
 
     ##Formateo de dataframe inventario
-    calc_mix(n_coladas)
-    steel, ttt, power_on, potencia_unit, energia_el = calc_potencia(df_inventario,carga_eaf)
+    df_inventario = calc_mix(n_coladas, df_inventario)
+
+    ##Cálculo de idicadores de potencia !!!! Suprimido
+    steel, ttt, power_on, potencia_unit, energia_el = calc_potencia(carga_eaf, df_inventario)
     l_costo = df_inventario['Costo'].tolist() * 1000000
 
+
     print("------------------RESULTADOS------------------")
+
+    l_kpi = []
 
     ##Cálculo del número de cestas
     Scrap_vol = df_inventario['Volumen'].sum()
     num_load = Scrap_vol / vol_cesta
 
     ##Cálculo del costo por tonelada de chatarra
-    Scrap_kpi = sum(l_costo) / prod_mes
+    scrap_cost = round(sum(l_costo) / prod_mes, 2)
+
+
     l_mix = df_inventario['Mix'].tolist()
     sum_rho = 0
+    sum_rend = 0
+    sum_energia_unit = 0
+    sum_ener = 0
 
     for x in range(len(l_mix)):
         sum_rho = sum_rho + ((l_mix[x] / 100) * l_density[x])
+        sum_rend = sum_rend + ((l_mix[x]/100)*l_rend[x])
+        sum_energia_unit = sum_energia_unit + ((l_mix[x]/100)* l_energia[x])
+        sum_ener = sum_ener + ((l_carga[x])*l_energia[x])
 
     rho_mix = round(sum_rho, 2)
 
+    rend_mix = Decimal(sum_rend).quantize(Decimal('.001'), rounding=ROUND_DOWN)
+
+    energia_unit_mix = round(sum_energia_unit, 2)
+    energia_mix = round(sum_ener, 0)
+
+    l_kpi.append(scrap_cost)
+    l_kpi.append(rho_mix)
+    l_kpi.append(rend_mix*100)
+    l_kpi.append(energia_unit_mix)
+    l_kpi.append(energia_mix)
+
+
     print("Num cestas:", num_load)
     print("N° de coladas:", round(n_coladas, 0))
-    print("Costo chatarra por tonelada de acero:", round(Scrap_kpi, 2), "$/ton")
+    print("Costo chatarra por tonelada de acero:", round(scrap_cost, 2), "$/ton")
     print("Potencia requerida:", potencia_unit, "kWh/ton")
     print("Energía eléctrica consumida:", energia_el, "kWh")
     print("Power On:", power_on, "min")
     print("Tap to tap:", ttt, "min")
     print("Productividad:", steel, "ton/h")
     print("Densidad ponderada:", rho_mix, "ton/m3")
+    print("Rendimiento promedio:", rend_mix*100,"%" )
+
     df_inventario.drop(columns=['Lifeline'], inplace=True)
 
     ##Cálculo de contaminantes
     print("-----------------CONTAMINANTES----------------")
-    df_contaminantes = calc_contaminantes(carga_eaf)
+    df_contaminantes = calc_contaminantes(carga_eaf, df_inventario, df_comp)
 
     ##Carga de cestas
     print("--------------------CESTAS--------------------")
-    df_cestas = calc_cesta(num_cestas, carga_cesta, vol_cesta, n_var)
 
-    df_cestas = calc_melting(df_cestas,num_cestas, df_inventario, rho_mix)
+    df_cestas, err = calc_cesta(num_cestas, carga_cesta, vol_cesta, n_var, df_inventario, base_scrap_dict)
 
+    if err == True:
+        main_err = True
+        return main_err
 
+    return df_inventario, df_cestas, l_kpi
 
-    report_ans = input("¿Desea generar un reporte? [Y/N] ")
-
-    if report_ans == "Y":
-        gen_report(prod_mes, n_coladas, Scrap_kpi, potencia_unit, energia_el, power_on, ttt, steel, rho_mix, num_cestas, n_var, df_contaminantes, df_cestas)
-
-    return df_inventario
-
-
-df_mix = pd.read_excel("Mix.xlsx", index_col=0, sheet_name='Inventario', usecols="A:P", nrows=8)
+"""
+df_mix = pd.read_excel("Mix.xlsx", sheet_name='Inventario', usecols="A:P", nrows=8)
+df_mix = df_mix.set_index('Tipo de Chatarra')
 df_mix = df_mix[df_mix.Inventario != 0]
 df_mix = np.split(df_mix, [6], axis=1)
 df_inventario = df_mix[0]
 df_comp = df_mix[1]
+"""
 
 ##df_comp = pd.read_excel('Mix.xlsx', sheet_name='Composicion', index_col=0, usecols='A:J', nrows=8)
 
-df_residual = (pd.read_excel('Mix.xlsx', sheet_name='Composicion', index_col=None, usecols='A:B', nrows=9, skiprows=11)).dropna()
+##main(df_inventario, df_comp, 4,9500,[1,1,1,1])
 
-resultado = main(df_inventario,df_comp,df_residual)
+"""
+resultado = main(df_inventario,df_comp, n_cestas, input_inv)
 print(tabulate(resultado, headers='keys', tablefmt='psql'))
+"""

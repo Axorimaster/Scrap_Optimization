@@ -240,18 +240,28 @@ def minz(table):
 
 
 def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, load_eaf, df_comp, df_res, epsilon, coladas):
+
+
     m = gen_matrix(n_var, n_cons)
     inv_cons = np.identity(n_var)
     inv_arr = np.array(invetarios)
     inv_cons = np.append(inv_cons, inv_arr.reshape(n_var, 1), axis=1)
+    l_nom = list(df_comp.index)
 
     l_res_cons = df_res['Max'].tolist()
     l_res_name = df_res['Elementos'].tolist()
 
     for x in range(n_var):
         l_cons = inv_cons[x].tolist()
-        l_cons[x] = l_cons[x] * coladas
+        l_cons[x] = (l_cons[x] * coladas)
+        l_cons_bot = l_cons.copy()
         l_cons.insert(n_var, "L")
+        l_cons_bot.insert(n_var, 'G')
+
+        if l_nom[x] == 'PESADA':
+            l_cons[x+2] = l_cons[x+2]+1
+            l_cons_bot[x+2] = l_cons_bot[x+2]-1
+            constrain(m, l_cons_bot)
 
         constrain(m, l_cons)
 
