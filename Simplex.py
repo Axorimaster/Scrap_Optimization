@@ -203,9 +203,8 @@ def obj(table, eq):
 
 
 def minz(table):
+
     table = convert_min(table)
-
-
     minz.num_pivot = 0
 
     while next_round_r(table) and minz.num_pivot <= 5000:
@@ -239,8 +238,7 @@ def minz(table):
         minimize.err = True
 
 
-def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, load_eaf, df_comp, df_res, epsilon, coladas):
-
+def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, load_eaf, df_comp, epsilon, coladas):
 
     m = gen_matrix(n_var, n_cons)
     inv_cons = np.identity(n_var)
@@ -248,20 +246,23 @@ def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, l
     inv_cons = np.append(inv_cons, inv_arr.reshape(n_var, 1), axis=1)
     l_nom = list(df_comp.index)
 
+    """
     l_res_cons = df_res['Max'].tolist()
     l_res_name = df_res['Elementos'].tolist()
+    """
 
     for x in range(n_var):
         l_cons = inv_cons[x].tolist()
         l_cons[x] = (l_cons[x] * coladas)
-        l_cons_bot = l_cons.copy()
+        # l_cons_bot = l_cons.copy()
         l_cons.insert(n_var, "L")
-        l_cons_bot.insert(n_var, 'G')
-
+        # l_cons_bot.insert(n_var, 'G')
+        """
         if l_nom[x] == 'PESADA':
             l_cons[x+2] = l_cons[x+2]+1
             l_cons_bot[x+2] = l_cons_bot[x+2]-1
             constrain(m, l_cons_bot)
+        """
 
         constrain(m, l_cons)
 
@@ -292,6 +293,7 @@ def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, l
     vol_cons.append((n_cesta - epsilon)*10)
     constrain(m, vol_cons)
 
+    """
     for x in range(len(l_res_cons)):
 
         max = l_res_cons[x]
@@ -306,6 +308,7 @@ def minimize(n_var, n_cons, precios, invetarios, densidad, n_cesta, vol_cesta, l
         l_cons_res.append("L")
         l_cons_res.append(max)
         constrain(m, l_cons_res)
+    """
 
     obj(m, precios)
     minimize.err = False
